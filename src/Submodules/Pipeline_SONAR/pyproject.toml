@@ -1,0 +1,37 @@
+[project]
+name = "LexaLCM-Pipeline-SONAR"
+readme = "README.md"
+requires-python = ">=3.12"
+version = "0.0.0_pre2"
+description = "The SONAR Pipeline for LexaLCM"
+dependencies = [
+    "sonar-space>=0.4.0",
+    "fairseq2>=0.4.5",
+]
+
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering",
+  "Development Status :: 4 - Beta",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "torch==2.6.0",
+    "torchaudio==2.6.0",
+    "wtpsplit[onnx-gpu]>=2.1.5",
+]
+# cpu = [
+#     "torch==2.6.0",
+#     "torchaudio==2.6.0",
+#     "wtpsplit[onnx-cpu]>=2.1.5",
+# ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-gpu" }
+
+
+[[tool.uv.index]]
+name = "pytorch-gpu"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true

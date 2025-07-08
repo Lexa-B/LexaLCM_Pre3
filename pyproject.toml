@@ -1,0 +1,61 @@
+[project]
+name = "LexaLCM"
+readme = "README.md"
+requires-python = ">=3.12"
+version = "0.0.0_pre2"
+description = "LCM: Large Concept Model an architecture using a higher-level semantic representation called a concept, which is language- and modality-agnostic, representing ideas or actions."
+dependencies = [
+    "accelerate>=1.7.0",
+    "pytest>=8.3.5",
+    #    "bitsandbytes>=0.45.5",
+    "numpy>=2.2.6",
+    "pandas>=2.2.3",
+    "sentencepiece>=0.2.0",
+    "wandb>=0.19.11",
+    "torchinfo>=1.8.0",
+    "pyarrow>=20.0.0",
+    "evaluate>=0.4.3",
+    "transformers>=4.51.3",
+]
+
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering",
+  "Development Status :: 4 - Beta",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "torch==2.7.0+cu128",
+    "wtpsplit[onnx-gpu]>=2.1.5",
+]
+# cpu = [
+#     "torch==2.7.0+cpu",
+#     "wtpsplit[onnx-cpu]>=2.1.5",
+#     "transformers[torch]>=4.51.3",
+# ]
+
+training = [
+    "datasets>=3.6.0",
+]
+
+data = [
+    "pyarrow>=20.0.0",
+    "seaborn>=0.13.2",
+    "matplotlib>=3.10.3",
+    "tqdm>=4.67.1",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-gpu" }
+
+
+[[tool.uv.index]]
+name = "pytorch-gpu"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+# [tool.uv.workspace]
+# members = [
+#     "src/Submodules/Pipeline_SONAR",
+# ]

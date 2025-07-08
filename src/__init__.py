@@ -1,0 +1,3 @@
+"""
+LexaLCM package
+""" 

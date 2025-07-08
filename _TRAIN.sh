@@ -1,0 +1,1 @@
+clear & uv run --extra gpu -m src.LexaLCM.Main -v
