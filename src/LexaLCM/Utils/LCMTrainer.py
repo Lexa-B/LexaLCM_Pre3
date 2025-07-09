@@ -8,9 +8,11 @@ Verbose_LCMTrainer = False
 
 class LCMTrainer(Trainer):
     def __init__(self, *args, config_dict=None, inspection_decoder=None, periodic_inspection_steps=500, **kwargs):
+        self.total_seen_embeddings = 0  # Cumulative embedding counter for the entire training run
         self.config_dict = config_dict or {}
         self.inspection_decoder = inspection_decoder
         self.periodic_inspection_steps = periodic_inspection_steps
+        self.verbose = kwargs.pop("verbose", False)
         kwargs.pop("config_dict", None)
         super().__init__(*args, **kwargs)
 
@@ -142,7 +144,34 @@ class LCMTrainer(Trainer):
 
         loss.backward()
 
-        print(f"[Step {self.state.global_step}] loss: {loss.item():.4f}")
+        # Count embeddings in this step
+        batch_embeddings = inputs["embeddings"]  # [B, T, 1024]
+        batch_mask = inputs.get("attention_mask", None)  # [B, T]
+
+        if batch_mask is not None:
+            # Only count non-padding positions and subtract the batch size twice to account for the [SoT] and [EoT] embeddings
+            raw_count = batch_mask.sum().item()
+            step_embedding_count = max(0, raw_count - (2 * batch_mask.shape[0]))  # Guard against negative
+        else:
+            # Fallback: assume all positions count
+            step_embedding_count = batch_embeddings.shape[0] * batch_embeddings.shape[1]
+
+        # Update cumulative count
+        self.total_seen_embeddings += step_embedding_count
+
+        if self.verbose:    
+            print(
+                f"[Step {self.state.global_step}] "
+                f"loss: {loss.item():.4f} | "
+                f"step embeddings: {step_embedding_count:,} | "
+                f"total embeddings: {self.total_seen_embeddings:,}"
+            )
+
+        # Log step & total embedding counts to WandB
+        wandb.log({
+            "embedding_stats/step_embeddings": step_embedding_count,
+            "embedding_stats/total_embeddings": self.total_seen_embeddings,
+        }, step=self.state.global_step)
 
         # ✅ Log gradient norms
         self.log_gradient_norms()

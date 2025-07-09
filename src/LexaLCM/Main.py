@@ -46,7 +46,7 @@ def inspect_embedding_batch(batch_embeddings, decoder, n_seq=2):
             decoded = decoder(batch_embeddings[i, j, :].unsqueeze(0))
             print(f"  Seq {j}: {decoded}")
 
-def RunTraining(config_training, model, train_dataset, val_dataset=None, dry_run=False, resume_from_checkpoint=None, resume_path=None, inspection_decoder=None):
+def RunTraining(config_training, model, train_dataset, val_dataset=None, dry_run=False, resume_from_checkpoint=None, resume_path=None, inspection_decoder=None, verbose=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     if not dry_run:
@@ -105,6 +105,7 @@ def RunTraining(config_training, model, train_dataset, val_dataset=None, dry_run
         compute_metrics=compute_metrics,
         config_dict=config_training,
         inspection_decoder=inspection_decoder,
+        verbose=verbose,
     )
 
     print("\n🚀 Starting training...")
@@ -143,7 +144,7 @@ def Main():
 
     # Load Config
     print("🔍 Loading config...")
-    config_path = 'src/LexaLCM/Config/Pretrain/Config_Pretrain_Pre2.yaml'
+    config_path = 'src/LexaLCM/Config/Pretrain/Config_Pretrain.yaml'
     config_training = LoadConfig(config_path)
 
     if args.verbose:
@@ -216,7 +217,7 @@ def Main():
         sample_size=500
     )
 
-    RunTraining(config_training, model, train_dataset, val_dataset, dry_run=False, resume_path=resume_path, inspection_decoder=training_inspection_decoder)
+    RunTraining(config_training, model, train_dataset, val_dataset, dry_run=False, resume_path=resume_path, inspection_decoder=training_inspection_decoder, verbose=args.verbose)
 
 if __name__ == "__main__":
     Main()

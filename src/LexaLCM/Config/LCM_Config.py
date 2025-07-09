@@ -3,7 +3,7 @@
 from transformers import PretrainedConfig, CONFIG_MAPPING
 
 class LexaLCMConfig(PretrainedConfig):
-    model_type = "lexa_lcm_pre2"
+    model_type = "lexa_lcm_pre3"
     def __init__(
         self,
         input_dim=1024,
@@ -38,4 +38,4 @@ class LexaLCMConfig(PretrainedConfig):
         self.AdaLN_Timestep_Embed_Dim = AdaLN_Timestep_Embed_Dim
         self.cfg_scale = cfg_scale
 
-CONFIG_MAPPING.register("lexa_lcm_pre2", LexaLCMConfig)
+CONFIG_MAPPING.register("lexa_lcm_pre3", LexaLCMConfig)

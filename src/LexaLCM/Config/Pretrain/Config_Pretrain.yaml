@@ -1,4 +1,4 @@
-# src/LexaLCM/Config/Pretrain/Config_Pretrain_Pre2_001.yaml
+# src/LexaLCM/Config/Pretrain/Config_Pretrain.yaml
 
 training:
   num_denoising_steps: 100 # The denoiser tower runs 100 times, (the contextualizer tower runs only once).
@@ -14,7 +14,7 @@ training:
   adafactor_warmup_init: True
   weight_decay: 0.01
   bf16: true
-  max_seq_len: 128  # Truncate sequences that are longer than this *after* adding SoT and EoT
+  max_seq_len: 64  # Truncate sequences that are longer than this *after* adding SoT and EoT
   output_dir: ./outputs
   save_every: 5000
   resume_from: None # Set to True or specify a specific filename to resume from a checkpoint (e.g. ./checkpoints/checkpoint_step_5000.pt), or None to start from scratch
@@ -27,6 +27,6 @@ data:
   val_split: Val
 
 wandb:
-  project: LexaLCM_Pre2
+  project: LexaLCM_Pre3
   run_name: lcm_run_001
-  log_every: 5
+  log_every: 20
