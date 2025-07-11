@@ -900,12 +900,20 @@ class LexaLCM(PreTrainedModel):
         padding_mask = attention_mask.bool() if attention_mask is not None else torch.ones_like(embeddings[:, :, 0]).bool()
 
         # Assign padding mask to attention modules
+        contextualizer_device = get_module_device(self.ContextualizerTower)
+        denoiser_device = get_module_device(self.DenoiserTower)
+        
+        # Create masks on their respective devices once
+        padding_mask_context = padding_mask.to(contextualizer_device) if padding_mask.device != contextualizer_device else padding_mask
+        padding_mask_denoiser = padding_mask.to(denoiser_device) if padding_mask.device != denoiser_device else padding_mask
+
+        # Assign padding mask to attention modules (no more device transfers)
         for layer in self.ContextualizerTower.layers:
-            layer.self_attention.padding_mask = assign_mask_to_module(padding_mask, layer.self_attention)
+            layer.self_attention.padding_mask = padding_mask_context
 
         for layer in self.DenoiserTower.layers:
-            layer.self_attention.padding_mask = assign_mask_to_module(padding_mask, layer.self_attention)
-            layer.cross_attention.padding_mask = assign_mask_to_module(padding_mask, layer.cross_attention)
+            layer.self_attention.padding_mask = padding_mask_denoiser
+            layer.cross_attention.padding_mask = padding_mask_denoiser
 
         inspection_decoder = getattr(self, "inspection_decoder", None)
         if inspection_decoder is not None:
