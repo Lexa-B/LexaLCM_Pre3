@@ -20,6 +20,7 @@ class LexaLCMConfig(PretrainedConfig):
         denoiser_iterations_inference = 40, # 40 is the default for Meta FAIR's LCM
         AdaLN_Timestep_Embed_Dim = 256,
         cfg_scale = 0.0, # Classifier-Free Guidance Scale
+        gpus = None, # GPU configuration for split-GPU setup
         **kwargs
     ):
     # def __init__(
@@ -55,5 +56,6 @@ class LexaLCMConfig(PretrainedConfig):
         self.denoiser_iterations_inference = denoiser_iterations_inference
         self.AdaLN_Timestep_Embed_Dim = AdaLN_Timestep_Embed_Dim
         self.cfg_scale = cfg_scale
+        self.gpus = gpus or {'denoiser': 0, 'contextualizer': 0, 'other': 0}
 
 CONFIG_MAPPING.register("lexa_lcm_pre3", LexaLCMConfig)

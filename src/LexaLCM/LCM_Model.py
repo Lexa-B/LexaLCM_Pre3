@@ -25,33 +25,68 @@ Verbose_Loss = False
 ## ------------------------------------------------------------
 
 def assign_mask_to_module(mask, module):
-    return mask.to(get_module_device(module))
+    # Use cached device if available, otherwise fall back to scanning
+    if hasattr(module, '_cached_device'):
+        device = module._cached_device
+    else:
+        device = get_module_device(module)
+    return mask.to(device) if mask.device != device else mask
 
 def get_module_device(module):
     """
-    Returns the device of the first parameter or buffer of the given module.
+    Returns the cached device of the module, or scans for it if not cached.
     """
-    params = list(module.parameters())
-    if params:
-        return params[0].device
-    buffers = list(module.buffers())
-    if buffers:
-        return buffers[0].device
-    return torch.device("cuda:0") # fallback: default to cuda:0 
+    if hasattr(module, '_cached_device'):
+        return module._cached_device
+    else:
+        # Fallback to scanning parameters
+        params = list(module.parameters())
+        if params:
+            return params[0].device
+        buffers = list(module.buffers())
+        if buffers:
+            return buffers[0].device
+        return torch.device("cuda:0")  # fallback
 
 def move_tensor_to_module(x, module):
     """
     Moves tensor, list of tensors, or dict of tensors to the device of the given module.
     """
-    device = get_module_device(module)
+    device = module._cached_device
     if isinstance(x, torch.Tensor):
-        return x.to(device)
+        return x.to(device) if x.device != device else x
     elif isinstance(x, (list, tuple)):
         return type(x)(move_tensor_to_module(xx, module) for xx in x)
     elif isinstance(x, dict):
         return {k: move_tensor_to_module(v, module) for k, v in x.items()}
     else:
         return x
+
+def cache_module_device(module):
+    """
+    Cache the device of a module to avoid repeated parameter scanning.
+    Call this after moving modules to their target devices.
+    """
+    params = list(module.parameters())
+    if params:
+        module._cached_device = params[0].device
+    else:
+        buffers = list(module.buffers())
+        if buffers:
+            module._cached_device = buffers[0].device
+        else:
+            module._cached_device = torch.device("cuda:0")  # fallback
+
+def cache_all_module_devices(module):
+    """
+    Recursively cache device information for a module and all its sub-modules.
+    """
+    # Cache this module's device
+    cache_module_device(module)
+    
+    # Recursively cache all sub-modules
+    for child in module.children():
+        cache_all_module_devices(child)
 
 ## ------------------------------------------------------------
 ## Helper Layers
@@ -732,6 +767,16 @@ class LexaLCM(PreTrainedModel):
         ).to(f"cuda:{gpu_denoiser}")
 
         self.PostNet_D_Down = PostNetD(config.d_model, config.input_dim).to(f"cuda:{gpu_other}")
+
+        # Cache device information for all modules and sub-modules to avoid repeated parameter scanning
+        cache_all_module_devices(self.TimestepEmbedder)
+        cache_all_module_devices(self.PreNet_C_Up)
+        cache_all_module_devices(self.ContextualizerTower)
+        cache_all_module_devices(self.PostNet_C_Down)
+        cache_all_module_devices(self.LatentBridge)
+        cache_all_module_devices(self.PreNet_D_Up)
+        cache_all_module_devices(self.DenoiserTower)
+        cache_all_module_devices(self.PostNet_D_Down)
 
     def _compute_cosine_schedule(self, num_steps: int, s: float = 0.008):
         """
