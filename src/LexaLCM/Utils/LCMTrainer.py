@@ -1,3 +1,4 @@
+import os
 from transformers import Trainer, Adafactor, get_scheduler
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
@@ -179,7 +180,19 @@ class LCMTrainer(Trainer):
             "embedding_stats/total_embeddings": self.total_seen_embeddings,
         }, step=self.state.global_step)
 
-        # ✅ Log gradient norms
-        self.log_gradient_norms()
+        # ✅ Log gradient norms ONLY on logging steps to avoid unnecessary computation
+        # This prevents walking all parameters on every step when not logging
+        # Check if this is a logging step (first step or every logging_steps)
+        grad_norm_frequency = self.config_dict.get("training", {}).get("grad_norm_log_every", self.args.logging_steps)
+        debug_mode = os.getenv("LEXALCM_DEBUG_GRAD_NORMS", "false").lower() == "true"
+        
+        should_log_gradients = (
+            (step == 0 or  # Always log on first step
+             (grad_norm_frequency > 0 and (step + 1) % grad_norm_frequency == 0)) and
+            (debug_mode or grad_norm_frequency > 0)  # Only log if in debug mode or explicitly enabled
+        )
+        
+        if should_log_gradients:
+            self.log_gradient_norms()
 
         return loss.detach()
