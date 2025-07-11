@@ -16,6 +16,12 @@ class LCMTrainer(Trainer):
         kwargs.pop("config_dict", None)
         super().__init__(*args, **kwargs)
 
+    def _wrap_model(self, model, training=True, dataloader=None):
+        return model  # Skip wrapping entirely if we're using custom-multi-GPU (i.e. we're not using DataParallel)
+    
+    def _prepare_inputs(self, inputs):
+        return inputs # Do NOT move inputs automatically — manual device placement only!
+
     def create_optimizer(self):
         if self.optimizer is not None:
             return self.optimizer
@@ -86,7 +92,7 @@ class LCMTrainer(Trainer):
         for name, param in self.model.named_parameters():
             if param.grad is not None:
                 grad_norm = param.grad.data.norm(2).item()
-                wandb.log({f"grad_norms/{name}": grad_norm}, step=self.state.global_step)
+                # wandb.log({f"grad_norms/{name}": grad_norm}, step=self.state.global_step)  # Temporarily disabled
                 total_norm += grad_norm ** 2
 
                 # 🖨️ Collect a few gradients to print
@@ -94,7 +100,7 @@ class LCMTrainer(Trainer):
                     grad_report.append(f"{name}: {grad_norm:.4f}")
 
         total_norm = total_norm ** 0.5
-        wandb.log({"global_grad_norm": total_norm}, step=self.state.global_step)
+        # wandb.log({"global_grad_norm": total_norm}, step=self.state.global_step)  # Temporarily disabled
 
         # 🖨️ Print the first few gradients once in a while
         if self.state.global_step < 5 or self.state.global_step % 50 == 0:

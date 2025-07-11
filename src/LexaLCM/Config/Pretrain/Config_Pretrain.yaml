@@ -20,6 +20,12 @@ training:
   resume_from: None # Set to True or specify a specific filename to resume from a checkpoint (e.g. ./checkpoints/checkpoint_step_5000.pt), or None to start from scratch
   num_workers: 20 # How many cpu cores to use for data loading
 
+gpus: # GPU IDs for each piece of the model's architecture
+  custom_multi_gpu: true # If true, we're using custom-multi-GPU where we move pieces of the model to the appropriate devices manually, otherwise we're using DataParallel
+  denoiser: 0
+  contextualizer: 1
+  other: 1
+
 data:
   data_dir: /home/lexa/DevProjects/_Data/LexaLCM_Datasets/src/Datasets/Wikipedia_Ja/
   text_column: text_sentences_sonar_emb

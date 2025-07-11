@@ -7,21 +7,39 @@ class LexaLCMConfig(PretrainedConfig):
     def __init__(
         self,
         input_dim=1024,
-        d_model=1536, # 2048 is the default for Meta FAIR's LCM, but you can use 1536 for a smaller model
+        d_model=2048, # 2048 is the default for Meta FAIR's 1.6B LCM, 4096 for their 7B LCM, but you can use 1536 for a smaller model
         d_latent=1024,
-        num_context_layers=3, # 5 is the default for Meta FAIR's LCM, but you can use less for a significantly smaller model
-        num_denoiser_layers=6, # 13 is the default for Meta FAIR's LCM, but you can use less for a significantly smaller model
-        n_heads=16, # 16 is the default for Meta FAIR's LCM, but you can use 8 for a slightly lighter model
-        d_ff=8192, # 8192 (* 4) is the default for SwiGLU, but you can use 6144 ( * 3) for a smaller model
+        num_context_layers=5, # 5 is the default for Meta FAIR's 1.6B and 7B LCMs, but you can use less for a significantly smaller model
+        num_denoiser_layers=15, # 13 is the default for Meta FAIR's 1.6B LCM, 14 for their 7B LCM, but you can use less for a significantly smaller model
+        n_heads=32, # 16 is the default for Meta FAIR's 1.6B LCM, 32 for their 7B LCM, but you can use 8 for a slightly lighter model
+        d_ff=8192, # 8192 (d_model: 2048 * 4, 4096 * 2, 1536 * 6) is the default for SwiGLU, but you can use 6144 (d_model: 2048 * 3, 1536 * 4, BUT DOESN'T WORK WITH d_model=4096!) for a smaller model
         dropout_context=0.1,
         dropout_latent=0.1,
         dropout_denoiser=0.15, # 0.15 is the default for Meta FAIR's LCM, reduced this to fight exploding gradients
-        denoiser_iterations_pretrain = 80,
-        denoiser_iterations_inference = 40,
+        denoiser_iterations_pretrain = 100, # 100 is the default for Meta FAIR's LCM
+        denoiser_iterations_inference = 40, # 40 is the default for Meta FAIR's LCM
         AdaLN_Timestep_Embed_Dim = 256,
         cfg_scale = 0.0, # Classifier-Free Guidance Scale
         **kwargs
     ):
+    # def __init__(
+    #     self,
+    #     input_dim=1024,
+    #     d_model=1024, # 2048 is the default for Meta FAIR's 1.6B LCM, but you can use 1536 for a smaller model
+    #     d_latent=1024,
+    #     num_context_layers=2, # 5 is the default for Meta FAIR's 1.6B LCM, but you can use less for a significantly smaller model
+    #     num_denoiser_layers=2, # 13 is the default for Meta FAIR's 1.6B LCM, but you can use less for a significantly smaller model
+    #     n_heads=8, # 16 is the default for Meta FAIR's 1.6B LCM, but you can use 8 for a slightly lighter model
+    #     d_ff=2048, # 8192 (* 4) is the default for SwiGLU, but you can use 6144 ( * 3) for a smaller model
+    #     dropout_context=0.1,
+    #     dropout_latent=0.1,
+    #     dropout_denoiser=0.15, # 0.15 is the default for Meta FAIR's LCM, reduced this to fight exploding gradients
+    #     denoiser_iterations_pretrain = 4, # 100 is the default for Meta FAIR's LCM
+    #     denoiser_iterations_inference = 4, # 40 is the default for Meta FAIR's LCM
+    #     AdaLN_Timestep_Embed_Dim = 256,
+    #     cfg_scale = 0.0, # Classifier-Free Guidance Scale
+    #     **kwargs
+    # ):
         super().__init__(**kwargs)
         self.input_dim = input_dim
         self.d_model = d_model

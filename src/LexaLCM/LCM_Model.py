@@ -13,11 +13,45 @@ from LexaLCM.Utils.InspectEmbeddings import inspect_embeddings as inspect_util
 
 # ToDo: make these global variables that can be set to True/False from the command line, maybe
 Verbose_Model = False
+Verbose_GPUs = False
 Verbose_Contextualizer = False
 Verbose_Denoiser = False
 Verbose_Stats_Modulator = False
 Verbose_Stats_ModulatorClamping = False
 Verbose_Loss = False
+
+## ------------------------------------------------------------
+## Helper Functions
+## ------------------------------------------------------------
+
+def assign_mask_to_module(mask, module):
+    return mask.to(get_module_device(module))
+
+def get_module_device(module):
+    """
+    Returns the device of the first parameter or buffer of the given module.
+    """
+    params = list(module.parameters())
+    if params:
+        return params[0].device
+    buffers = list(module.buffers())
+    if buffers:
+        return buffers[0].device
+    return torch.device("cuda:0") # fallback: default to cuda:0 
+
+def move_tensor_to_module(x, module):
+    """
+    Moves tensor, list of tensors, or dict of tensors to the device of the given module.
+    """
+    device = get_module_device(module)
+    if isinstance(x, torch.Tensor):
+        return x.to(device)
+    elif isinstance(x, (list, tuple)):
+        return type(x)(move_tensor_to_module(xx, module) for xx in x)
+    elif isinstance(x, dict):
+        return {k: move_tensor_to_module(v, module) for k, v in x.items()}
+    else:
+        return x
 
 ## ------------------------------------------------------------
 ## Helper Layers
@@ -425,6 +459,8 @@ class PreNetC(nn.Module):
         self.act = nn.SiLU()
 
     def forward(self, x):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - PreNetC] x.device = {x.device}, param.device = {get_module_device(self)}")
         x = self.norm(x)
         x = self.proj(x)
         x = self.act(x)
@@ -436,6 +472,8 @@ class PostNetC(nn.Module):
         self.proj = nn.Linear(in_dim, out_dim)
 
     def forward(self, x):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - PostNetC] x.device = {x.device}, param.device = {get_module_device(self)}")
         return self.proj(x)
 
 class PreNetD(nn.Module):
@@ -446,6 +484,8 @@ class PreNetD(nn.Module):
         self.act = nn.SiLU()
 
     def forward(self, x):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - PreNetD] x.device = {x.device}, param.device = {get_module_device(self)}")
         x = self.norm(x)
         x = self.proj(x)
         x = self.act(x)
@@ -457,6 +497,8 @@ class PostNetD(nn.Module):
         self.proj = nn.Linear(in_dim, out_dim)
 
     def forward(self, x):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - PostNetD] x.device = {x.device}, param.device = {get_module_device(self)}")
         return self.proj(x)
 
 ## Contextualizer Tower
@@ -488,6 +530,8 @@ class ContextualizerTower(nn.Module):
         ])
 
     def forward(self, x):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - ContextualizerTower] x.device = {x.device}, param.device = {get_module_device(self)}")
         for i, layer in enumerate(self.layers):
             if Verbose_Model:
                 print(f"[DEBUG - model] Before ContextualizerLayer {i}: dtype = {x.dtype}")
@@ -509,6 +553,8 @@ class LatentBridge(nn.Module): # ToDo: Add in future functionality such as the g
         super().__init__()
 
     def forward(self, x):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - LatentBridge] x.device = {x.device}, param.device = {get_module_device(self)}")
         return x
 
 ## Denoiser Tower
@@ -545,6 +591,14 @@ class DenoiserTower(nn.Module):
         ])
 
     def forward(self, x, context, timestep, *, dropout_denoiser=0.0, training=False):
+        if Verbose_GPUs:
+            print(f"[DEBUG - CTX - DenoiserTower] x.device = {x.device}, context.device = {context.device}, timestep.device = {timestep.device}, param.device = {get_module_device(self)}")
+        # Ensure all tensors are on the DenoiserTower device
+        device = get_module_device(self)
+        x = x.to(device)
+        context = context.to(device)
+        timestep = timestep.to(device)
+
         with autocast(dtype=torch.bfloat16, device_type="cuda", enabled=True):
             for i, layer in enumerate(self.layers):
                 x = layer(x, context, timestep, dropout_denoiser=dropout_denoiser, training=training)
@@ -614,9 +668,25 @@ def l2_euclidean_loss_with_mask(
 
 class LexaLCM(PreTrainedModel):
     config_class = LexaLCMConfig
+
+    # Suppress HuggingFace's automatic device placement with a NO-OP to()
+    def to(self, *args, **kwargs):
+        # print("[DEBUG] LexaLCM.to() called — suppressed to preserve manual device placements.")
+        return self
+
     def __init__(self, config):
         super().__init__(config)
         self.config = config
+
+        # Get GPU IDs from config
+        gpu_denoiser = config.gpus.get('denoiser', 0)
+        gpu_contextualizer = config.gpus.get('contextualizer', 0)
+        gpu_other = config.gpus.get('other', 0)
+
+        if Verbose_GPUs:
+            print("ContextualizerTower - sending to:", f"cuda:{gpu_contextualizer}")
+            print("DenoiserTower - sending to:", f"cuda:{gpu_denoiser}")
+            print("Other Architecture Components - sending to:", f"cuda:{gpu_other}")
 
         # Precompute cosine schedule for denoising loop
         max_denoising_steps = max(
@@ -629,11 +699,15 @@ class LexaLCM(PreTrainedModel):
         )
 
         # Create TimestepEmbedder for AdaLN
-        self.TimestepEmbedder = TimestepEmbedder(t_emb_dim=config.AdaLN_Timestep_Embed_Dim, d_model=config.d_model)
+        self.TimestepEmbedder = TimestepEmbedder(
+            t_emb_dim=config.AdaLN_Timestep_Embed_Dim,
+            d_model=config.d_model
+        ).to(f"cuda:{gpu_denoiser}")
+
 
         # Architecture
 
-        self.PreNet_C_Up = PreNetC(config.input_dim, config.d_model)
+        self.PreNet_C_Up = PreNetC(config.input_dim, config.d_model).to(f"cuda:{gpu_other}")
 
         self.ContextualizerTower = ContextualizerTower(
             num_layers=config.num_context_layers,
@@ -641,13 +715,13 @@ class LexaLCM(PreTrainedModel):
             n_heads=config.n_heads,
             d_ff=config.d_ff,
             dropout=config.dropout_context
-        )
+        ).to(f"cuda:{gpu_contextualizer}")
 
-        self.PostNet_C_Down = PostNetC(config.d_model, config.d_latent)
+        self.PostNet_C_Down = PostNetC(config.d_model, config.d_latent).to(f"cuda:{gpu_other}")
 
-        self.LatentBridge = LatentBridge()
+        self.LatentBridge = LatentBridge().to(f"cuda:{gpu_other}")
 
-        self.PreNet_D_Up = PreNetD(config.d_latent, config.d_model)
+        self.PreNet_D_Up = PreNetD(config.d_latent, config.d_model).to(f"cuda:{gpu_other}")
 
         self.DenoiserTower = DenoiserTower(
             num_layers=config.num_denoiser_layers,
@@ -655,9 +729,9 @@ class LexaLCM(PreTrainedModel):
             d_ff=config.d_ff,
             n_heads=config.n_heads,
             dropout=config.dropout_denoiser
-        )
+        ).to(f"cuda:{gpu_denoiser}")
 
-        self.PostNet_D_Down = PostNetD(config.d_model, config.input_dim)
+        self.PostNet_D_Down = PostNetD(config.d_model, config.input_dim).to(f"cuda:{gpu_other}")
 
     def _compute_cosine_schedule(self, num_steps: int, s: float = 0.008):
         """
@@ -707,10 +781,13 @@ class LexaLCM(PreTrainedModel):
             if Verbose_Model:
                 print(f"[DEBUG - model] ᾱ[{t}] = {alpha_bar.item():.6f}")
 
+            denoiser_device = get_module_device(self.DenoiserTower) # Force alpha_bar onto the DenoiserTower's device
+
             # 2. Sample new noise each step
-            epsilon = torch.randn_like(x_0)
+            epsilon = torch.randn_like(x_0).to(device=denoiser_device)
 
             # 3. Forward diffuse both mix x_0 and epsilon
+            x_0 = x_0.to(denoiser_device)
             x_t_cond = (alpha_bar.sqrt() * x_0 + (1 - alpha_bar).sqrt() * epsilon)
 
             # 4. Embed timestep and denoise
@@ -718,19 +795,26 @@ class LexaLCM(PreTrainedModel):
                 (x_0.shape[0], 1, 1),
                 fill_value=t,
                 dtype=torch.float32,
-                device=x_0.device
+                device=denoiser_device # Force timestep and t_emb onto the TimestepEmbedder's device
             )
-            t_emb = self.TimestepEmbedder(timestep).to(x_0.dtype)
+            t_emb = self.TimestepEmbedder(timestep).to(dtype=x_0.dtype, device=denoiser_device)
+
+            # Catch device mismatch
+            def check_device_mismatch():
+                assert x_t_cond.device == x_0.device == t_emb.device == get_module_device(self.DenoiserTower), "Mismatch in tensor and model device in run_denoising_loop"
 
             if cfg_scale > 0.0 and not training: # If CFG is enabled and we're not training, we need to denoise both the conditional and unconditional contexts
+                uncond_context = uncond_context.to(denoiser_device)
                 x_t_uncond = (alpha_bar.sqrt() * uncond_context + (1 - alpha_bar).sqrt() * epsilon)
 
+                check_device_mismatch()
                 x_cond = self.DenoiserTower(
                     x_t_cond, 
                     x_0, 
                     t_emb,
                     dropout_denoiser=0.0, training=False
                 )
+                check_device_mismatch()
                 x_uncond = self.DenoiserTower(
                     x_t_uncond, uncond_context, t_emb,
                     dropout_denoiser=0.0, training=False
@@ -741,6 +825,7 @@ class LexaLCM(PreTrainedModel):
 
             else:
                 # Training or no CFG
+                check_device_mismatch()
                 x = self.DenoiserTower(
                     x_t_cond, 
                     x_0,
@@ -761,16 +846,21 @@ class LexaLCM(PreTrainedModel):
         if Verbose_Loss:
             print(f"[DEBUG - Loss] embeddings: shape={embeddings.shape}, dtype={embeddings.dtype}")
 
+        if Verbose_GPUs:
+            print("PreNet_C_Up device config: ", get_module_device(self.PreNet_C_Up))
+            print("ContextualizerTower device config: ", get_module_device(self.ContextualizerTower))
+            print("DenoiserTower device config: ", get_module_device(self.DenoiserTower))
+
         # Convert attention_mask [B, T] into boolean mask where True = keep, False = pad
         padding_mask = attention_mask.bool() if attention_mask is not None else torch.ones_like(embeddings[:, :, 0]).bool()
 
         # Assign padding mask to attention modules
         for layer in self.ContextualizerTower.layers:
-            layer.self_attention.padding_mask = padding_mask
+            layer.self_attention.padding_mask = assign_mask_to_module(padding_mask, layer.self_attention)
 
         for layer in self.DenoiserTower.layers:
-            layer.self_attention.padding_mask = padding_mask
-            layer.cross_attention.padding_mask = padding_mask
+            layer.self_attention.padding_mask = assign_mask_to_module(padding_mask, layer.self_attention)
+            layer.cross_attention.padding_mask = assign_mask_to_module(padding_mask, layer.cross_attention)
 
         inspection_decoder = getattr(self, "inspection_decoder", None)
         if inspection_decoder is not None:
@@ -778,31 +868,46 @@ class LexaLCM(PreTrainedModel):
         
         # PreNet - Contextualizer Tower
 
-        x = self.PreNet_C_Up(embeddings)
+        x = move_tensor_to_module(embeddings, self.PreNet_C_Up)
+        x = self.PreNet_C_Up(x)
+        if Verbose_GPUs:
+            print(f"[DEBUG] PreNet_C_Up device = {get_module_device(self.PreNet_C_Up)}")
         if Verbose_Model:
             print(f"[DEBUG - model] after PreNet_C_Up: shape={x.shape}, dtype={x.dtype}")
 
         # Contextualizer Tower
 
+        x = move_tensor_to_module(x, self.ContextualizerTower)
         x = self.ContextualizerTower(x)
+        if Verbose_GPUs:
+            print(f"[DEBUG] ContextualizerTower device = {get_module_device(self.ContextualizerTower)}")
         if Verbose_Model:
             print(f"[DEBUG - model] after ContextualizerTower: shape={x.shape}, dtype={x.dtype}")
 
         # PostNet - Contextualizer Tower
 
+        x = move_tensor_to_module(x, self.PostNet_C_Down)
         x = self.PostNet_C_Down(x)
+        if Verbose_GPUs:
+            print(f"[DEBUG] PostNet_C_Down device = {get_module_device(self.PostNet_C_Down)}")
         if Verbose_Model:
             print(f"[DEBUG - model] after PostNet_C_Down: shape={x.shape}, dtype={x.dtype}")
 
         # LatentBridge
 
-        x = self.LatentBridge(x)
+        x = move_tensor_to_module(x, self.LatentBridge)
+        x = self.LatentBridge(x) # Simple passthrough, no change needed ToDo: add in future functionality such as the gate for MoE or activation steering, but for now it's just a simple pass-through layer; once we have that, we can move this to the appropriate device
+        if Verbose_GPUs:
+            print(f"[DEBUG] LatentBridge device = {get_module_device(self.LatentBridge)}")
         if Verbose_Model:
             print(f"[DEBUG - model] after LatentBridge: shape={x.shape}, dtype={x.dtype}")
 
         # PreNet - DenoiserTower
 
+        x = move_tensor_to_module(x, self.PreNet_D_Up)
         x = self.PreNet_D_Up(x)
+        if Verbose_GPUs:
+            print(f"[DEBUG] PreNet_D_Up device = {get_module_device(self.PreNet_D_Up)}")
         if Verbose_Model:
             print(f"[DEBUG - model] after PreNet_D_Up: shape={x.shape}, dtype={x.dtype}")
 
@@ -819,6 +924,10 @@ class LexaLCM(PreTrainedModel):
             uncond_context[:, 0, :] = latent_context[:, 0, :]
 
         # Denoise from noise → latents using contextual embedding
+        latent_context = move_tensor_to_module(x, self.DenoiserTower)
+        if uncond_context is not None:
+            uncond_context = move_tensor_to_module(uncond_context, self.DenoiserTower)
+
         x = self.run_denoising_loop(
             context=latent_context,
             training=self.training,
@@ -826,6 +935,9 @@ class LexaLCM(PreTrainedModel):
             cfg_scale=self.config.cfg_scale,
             uncond_context=uncond_context,
         )
+
+        if Verbose_GPUs:
+            print(f"[DEBUG] Denoising Loop device = {get_module_device(self.DenoiserTower)}")
 
         if Verbose_Model:
             print(f"[DEBUG - model] after Denoising Loop: shape={x.shape}, dtype={x.dtype}")
@@ -836,7 +948,11 @@ class LexaLCM(PreTrainedModel):
             x = x.to(torch.float32)
             if Verbose_Model:
                 print(f"[DEBUG - model] after to(float32) PostNet_D_Down: shape={x.shape}, dtype={x.dtype}")
+            x = move_tensor_to_module(x, self.PostNet_D_Down)
             x = self.PostNet_D_Down(x)
+            # print(f"[DEBUG] PostNet_D_Down Device Params: {self.PostNet_D_Down.parameters()}")
+            if Verbose_GPUs:
+                print(f"[DEBUG] PostNet_D_Down device = {get_module_device(self.PostNet_D_Down)}")
             if Verbose_Model:
                 print(f"[DEBUG - model] after PostNet_D_Down: shape={x.shape}, dtype={x.dtype}")
 
@@ -850,8 +966,23 @@ class LexaLCM(PreTrainedModel):
             # labels: [B, T, D], x: [B, T, D], attention_mask: [B, T]
             if Verbose_Model:   
                 print(f"[DEBUG - model] labels is not None, returning loss and logits - shape={x.shape}, dtype={x.dtype}")
+
+            # HuggingFace expects the returned loss tensor to be on its "main" device (usually CUDA:0), even if you computed the loss on another GPU.
+            main_device = labels.device
+
+            # Move target/labels and mask to the output's device
+            labels = labels.to(x.device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(x.device)
+
+            # Compute loss on the output device (PostNet_D_Down, e.g. CUDA:1)
+            loss = l2_euclidean_loss_with_mask(x, labels, attention_mask)
+
+            # Move loss back to the main device because HuggingFace expects it to be on its "main" device (usually CUDA:0)
+            loss = loss.to(main_device)
+
             return {
-                "loss": l2_euclidean_loss_with_mask(x, labels, attention_mask),
+                "loss": loss,
                 "logits": x,  # Keep all timesteps for analysis
             }
 

@@ -46,9 +46,20 @@ def inspect_embedding_batch(batch_embeddings, decoder, n_seq=2):
             decoded = decoder(batch_embeddings[i, j, :].unsqueeze(0))
             print(f"  Seq {j}: {decoded}")
 
-def RunTraining(config_training, model, train_dataset, val_dataset=None, dry_run=False, resume_from_checkpoint=None, resume_path=None, inspection_decoder=None, verbose=False):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+def RunTraining(config_training, 
+                model, 
+                train_dataset, 
+                val_dataset=None, 
+                dry_run=False, 
+                resume_from_checkpoint=None, 
+                resume_path=None, 
+                inspection_decoder=None, 
+                verbose=False):
+
+    print("Available GPUs:")
+    for i in range(torch.cuda.device_count()):
+        print(f"CUDA:{i} → {torch.cuda.get_device_name(i)}")
+
     if not dry_run:
         model.train()
     else:
@@ -132,7 +143,7 @@ def LoadConfig(path):
         return yaml.safe_load(file)
 
 def Main():
-    print("🚀 Starting LexaLCM Pre2 Training")
+    print("🚀 Starting LexaLCM Pre3 Training")
 
     # CLI Arguments
     parser = argparse.ArgumentParser()
@@ -162,7 +173,8 @@ def Main():
     # Init Model
     resume_path = config_training["training"].get("resume_from", None)
 
-    model_config = LexaLCMConfig()
+    model_config = LexaLCMConfig(**config_training["gpus"] | config_training["training"])
+    model_config.gpus = config_training["gpus"]   # Add gpus to the config as a separate key
     model = LexaLCM(model_config)
 
     # Inspection Decoder
@@ -217,7 +229,16 @@ def Main():
         sample_size=500
     )
 
-    RunTraining(config_training, model, train_dataset, val_dataset, dry_run=False, resume_path=resume_path, inspection_decoder=training_inspection_decoder, verbose=args.verbose)
+    RunTraining(
+        config_training, 
+        model, 
+        train_dataset, 
+        val_dataset, 
+        dry_run=False, 
+        resume_path=resume_path, 
+        inspection_decoder=training_inspection_decoder, 
+        verbose=args.verbose
+        )
 
 if __name__ == "__main__":
     Main()
