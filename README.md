@@ -162,7 +162,7 @@ clear & uv run --extra gpu -m src.LexaLCM.Main -v
 
 ## Testing
 
-**Currently, this is not working... I'll patch it in Pre2**
+**Currently, this is not working... I'll patch it soon**
 
 ### Test the model
 ```bash

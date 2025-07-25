@@ -9,6 +9,8 @@
     - [ ] disable the NO-OP to() in LCM_Model.py
     - [ ] Check that there aren't any other places that could cause problems or eat performance
 - [ ] Improve the dataset:
+  - [ ] Make sure the dataset is rectangular
+  - [ ] Build a script to generate a cached index of the dataset's length and shape in a sidecar file (for hitlist # 4)
   - [ ] 10x size
   - [ ] Diverse selection of data
   - [ ] Cleaning data to reduce "Garbage-in-garbage-out" problems 
@@ -19,6 +21,7 @@
 
 ## High
 
+- [ ] Add s/it speed to the wandb logs
 - [ ] Optimize the training loop for speed
 - [ ] Optimize the model's speed
 - [ ] Optimize the dataloader's speed
