@@ -17,11 +17,11 @@ repository-artifact: 'https://huggingface.co/Lexa-B/LexaLCM_Pre3'
 abstract: >-
   A pre-trained LCM with 2,169,819,392 parameters mostly
   based on Meta FAIR's Two-Tower Diffusion LCM architecture,
-  but in Hugging FaceTransformers. The model trained on a
+  but in Hugging FaceTransformers. The model was trained on a
   dataset of 2.4M Japanese Wikipedia articles that have been
   pre-segmented and concept-embedded. Segmentation was
   performed using SaT capped at 250 characters/segment and
-  embedded was performed with SONAR.
+  embedding was performed with SONAR.
 keywords:
   - Large Concept Model
   - AI
