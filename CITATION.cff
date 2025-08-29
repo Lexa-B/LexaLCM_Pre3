@@ -1,0 +1,32 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: LexaLCM-Pre3
+message: >-
+  A Two-Tower Latent Diffusion Large Concept Model built in
+  HuggingFace Transformers. 
+type: software
+authors:
+  - given-names: Lexa
+    family-names: Baldwin
+    email: Lexa.40@proton.me
+    affiliation: 'https://orcid.org/0000-0002-3990-2875'
+repository-code: 'https://github.com/Lexa-B/LexaLCM_Pre3'
+repository-artifact: 'https://huggingface.co/Lexa-B/LexaLCM_Pre3'
+abstract: >-
+  A pre-trained LCM with 2,169,819,392 parameters mostly
+  based on Meta FAIR's Two-Tower Diffusion LCM architecture,
+  but in Hugging FaceTransformers. The model trained on a
+  dataset of 2.4M Japanese Wikipedia articles that have been
+  pre-segmented and concept-embedded. Segmentation was
+  performed using SaT capped at 250 characters/segment and
+  embedded was performed with SONAR.
+keywords:
+  - Large Concept Model
+  - AI
+  - Transformers
+  - Open Source
+license: MIT
+version: Pre3
+date-released: '2025-07-26'
